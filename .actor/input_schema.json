@@ -1,0 +1,85 @@
+{
+  "title": "Catho Jobs Scraper",
+  "description": "Extract job listings from Catho.com.br. Provide a search URL or use keyword + location filters.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrl": {
+      "title": "Start URL",
+      "type": "string",
+      "description": "Catho search URL to scrape. If set, overrides keyword/location.",
+      "editor": "textfield",
+      "example": "https://www.catho.com.br/vagas/?q=desenvolvedor&cidade=São Paulo"
+    },
+    "keyword": {
+      "title": "Search Keywords",
+      "type": "string",
+      "description": "Job title or skills to search (e.g., 'desenvolvedor', 'engenheiro').",
+      "editor": "textfield",
+      "prefill": "",
+      "default": "",
+      "example": "desenvolvedor"
+    },
+    "location": {
+      "title": "City or State",
+      "type": "string",
+      "description": "City or state to search (e.g., 'São Paulo', 'Rio de Janeiro').",
+      "editor": "textfield",
+      "example": "São Paulo"
+    },
+    "collectDetails": {
+      "title": "Collect Full Job Details",
+      "type": "boolean",
+      "description": "Visit each job detail page to extract complete descriptions, benefits, and additional information.",
+      "editor": "checkbox",
+      "default": false,
+      "prefill": false
+    },
+    "results_wanted": {
+      "title": "Maximum Jobs to Extract",
+      "type": "integer",
+      "description": "Maximum number of job listings to collect.",
+      "minimum": 1,
+      "default": 10,
+      "prefill": 10,
+      "editor": "number"
+    },
+    "max_pages": {
+      "title": "Maximum Pages",
+      "type": "integer",
+      "description": "Maximum number of result pages to process.",
+      "minimum": 1,
+      "editor": "number",
+      "default": 2,
+      "prefill": 2
+    },
+    "maxConcurrency": {
+      "title": "Max Concurrency",
+      "type": "integer",
+      "description": "Maximum concurrent requests (tune speed vs blocking risk).",
+      "minimum": 1,
+      "default": 3,
+      "prefill": 3,
+      "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy Configuration",
+      "type": "object",
+      "description": "Recommended: Use Apify Proxy (residential or datacenter) to avoid blocking.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      },
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      }
+    }
+  },
+  "required": []
+}

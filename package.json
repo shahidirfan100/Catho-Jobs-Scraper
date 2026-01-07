@@ -1,0 +1,29 @@
+{
+  "name": "catho-jobs-scraper",
+  "version": "1.0.0",
+  "description": "Extract job listings from Catho.com.br - Brazil's leading job platform. Get comprehensive job data including salaries, descriptions, and company information.",
+  "type": "module",
+  "dependencies": {
+    "apify": "^3.5.2",
+    "crawlee": "^3.15.3",
+    "playwright": "1.56.1",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "@apify/eslint-config": "^1.0.0",
+    "eslint": "^9.29.0",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.5.3"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "test": "echo \"Error: oops, the Actor has no tests yet, sad!\" && exit 1",
+    "postinstall": "npx crawlee install-playwright-browsers"
+  },
+  "author": "Shahid",
+  "license": "ISC"
+}
