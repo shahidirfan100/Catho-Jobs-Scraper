@@ -33,7 +33,6 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 | `location` | String | City or state filter | *(empty)* |
 | `startUrl` | String | Direct Catho search URL (overrides keyword/location) | - |
 | `results_wanted` | Integer | Maximum jobs to collect | `50` |
-| `max_pages` | Integer | Maximum listing pages to process | `5` |
 | `proxyConfiguration` | Object | Proxy settings for reliability | Apify Residential |
 
 ---
@@ -56,8 +55,7 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 {
   "keyword": "engenheiro",
   "location": "Rio de Janeiro",
-  "results_wanted": 50,
-  "max_pages": 3
+  "results_wanted": 50
 }
 ```
 
@@ -75,8 +73,7 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 ```json
 {
   "keyword": "gerente de projetos",
-  "results_wanted": 200,
-  "max_pages": 10
+  "results_wanted": 200
 }
 ```
 
@@ -121,12 +118,12 @@ Each extracted job contains the following fields:
 
 ## Performance
 
-| Scenario | Results | Pages | Est. Time |
-|----------|---------|-------|-----------|
-| Quick Test | 20 | 2 | ~20 seconds |
-| Basic Research | 50 | 3 | ~30 seconds |
-| Standard Collection | 100 | 5 | ~1 minute |
-| Large Dataset | 500 | 25 | ~5 minutes |
+| Scenario | Results | Est. Time |
+|----------|---------|-----------|
+| Quick Test | 20 | ~20 seconds |
+| Basic Research | 50 | ~30 seconds |
+| Standard Collection | 100 | ~1 minute |
+| Large Dataset | 500 | ~5 minutes |
 
 ### Tips for Best Results
 

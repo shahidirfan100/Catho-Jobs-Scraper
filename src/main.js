@@ -131,12 +131,12 @@ try {
         keyword = '',
         location = '',
         results_wanted: resultsWantedRaw = 50,
-        max_pages: maxPagesRaw = 5,
         proxyConfiguration,
     } = input;
 
     const resultsWanted = Number.isFinite(+resultsWantedRaw) ? Math.max(1, +resultsWantedRaw) : 50;
-    const maxPages = Number.isFinite(+maxPagesRaw) ? Math.max(1, +maxPagesRaw) : 5;
+    // Auto-calculate max pages based on results wanted (Catho shows ~15 jobs per page)
+    const maxPages = Math.ceil(resultsWanted / 15) + 2; // Add buffer for duplicates
     const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
 
     // Determine search parameters from startUrl or inputs
@@ -162,7 +162,6 @@ try {
     log.info(`   Keyword: ${keywordValue || '(all jobs)'}`);
     log.info(`   Location: ${locationValue || '(all Brazil)'}`);
     log.info(`   Results wanted: ${resultsWanted}`);
-    log.info(`   Max pages: ${maxPages}`);
 
     // Create Playwright crawler
     const crawler = new PlaywrightCrawler({
