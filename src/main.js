@@ -71,20 +71,27 @@ const parseJobFromListing = (job) => {
         .replace(/^-|-$/g, '');
     const url = `https://www.catho.com.br/vagas/${slug}/${id}/`;
 
-    // Extract company
-    const company = data.empresa?.nome || data.nomeEmpresa || job.empresa?.nome || null;
+    // Extract company (anunciante = advertiser, contratante = employer)
+    let company = null;
+    if (data.contratante?.nome && data.contratante.nome !== 'Confidencial') {
+        company = data.contratante.nome;
+    } else if (data.anunciante?.nome && data.anunciante.nome !== 'Confidencial') {
+        company = data.anunciante.nome;
+    } else if (data.contratante?.nome) {
+        company = data.contratante.nome; // Use even if confidential
+    } else if (data.anunciante?.nome) {
+        company = data.anunciante.nome;
+    }
 
-    // Extract location
+    // Extract location (from vagas array first, then fallbacks)
     let location = null;
-    if (data.cidade && data.uf) {
+    if (data.vagas?.[0]) {
+        const loc = data.vagas[0];
+        location = [loc.cidade, loc.uf].filter(Boolean).join(', ');
+    } else if (data.cidade && data.uf) {
         location = `${data.cidade}, ${data.uf}`;
     } else if (data.localizacao) {
         location = data.localizacao;
-    } else if (job.cidade && job.uf) {
-        location = `${job.cidade}, ${job.uf}`;
-    } else if (data.vagas?.[0]) {
-        const loc = data.vagas[0];
-        location = [loc.cidade, loc.uf].filter(Boolean).join(', ');
     }
 
     // Extract salary
