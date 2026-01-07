@@ -188,18 +188,28 @@ try {
         maxRequestRetries: 3,
         requestHandlerTimeoutSecs: 60,
         navigationTimeoutSecs: 45,
-        launchContext: {
-            launchOptions: {
-                headless: true,
-                args: ['--disable-blink-features=AutomationControlled'],
-            },
+        useSessionPool: true,
+        sessionPoolOptions: {
+            maxPoolSize: 10,
+        },
+        browserPoolOptions: {
+            useFingerprints: true,
+            preLaunchHooks: [
+                async (pageId, launchContext) => {
+                    launchContext.launchOptions = {
+                        ...launchContext.launchOptions,
+                        headless: true,
+                        args: ['--disable-blink-features=AutomationControlled'],
+                    };
+                    launchContext.userAgent = getRandomUserAgent();
+                },
+            ],
         },
         preNavigationHooks: [
             async ({ page }) => {
                 await page.setExtraHTTPHeaders({
                     'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
                 });
-                await page.setUserAgent(getRandomUserAgent());
             },
         ],
         async requestHandler({ request, page }) {
