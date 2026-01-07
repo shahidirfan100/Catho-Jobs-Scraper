@@ -1,9 +1,11 @@
-// Catho Jobs Scraper - Playwright + __NEXT_DATA__ extraction
+// Catho Jobs Scraper - Fast, Stealthy, Production-Ready
+// Extracts all data from __NEXT_DATA__ on listing pages only
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler, Dataset, sleep } from 'crawlee';
-import { load as cheerioLoad } from 'cheerio';
 
 const BASE_URL = 'https://www.catho.com.br/vagas/';
+const MAX_CONCURRENCY = 5;
+const JOBS_PER_PAGE = 20; // Catho shows ~15-20 jobs per page
 
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -15,13 +17,7 @@ const USER_AGENTS = [
 
 const getRandomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-const cleanHtml = (html) => {
-    if (!html) return null;
-    const $ = cheerioLoad(html);
-    $('script, style, noscript').remove();
-    return $.root().text().replace(/\s+/g, ' ').trim();
-};
-
+// Build search URL with proper parameter handling
 const buildSearchUrl = ({ keyword, location, page = 1 }) => {
     const url = new URL(BASE_URL);
     if (keyword) url.searchParams.set('q', keyword);
@@ -30,6 +26,21 @@ const buildSearchUrl = ({ keyword, location, page = 1 }) => {
     return url.href;
 };
 
+// Parse URL to extract search parameters
+const parseSearchUrl = (urlString) => {
+    try {
+        const url = new URL(urlString);
+        return {
+            keyword: url.searchParams.get('q') || '',
+            location: url.searchParams.get('cidade') || '',
+            page: parseInt(url.searchParams.get('page') || '1', 10),
+        };
+    } catch {
+        return { keyword: '', location: '', page: 1 };
+    }
+};
+
+// Extract __NEXT_DATA__ from page
 const extractNextData = async (page) => {
     try {
         const nextDataStr = await page.evaluate(() => {
@@ -45,97 +56,60 @@ const extractNextData = async (page) => {
     return null;
 };
 
-const extractJsonLd = async (page) => {
-    try {
-        const jsonLdData = await page.evaluate(() => {
-            const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-            const data = [];
-            scripts.forEach(script => {
-                try {
-                    data.push(JSON.parse(script.textContent));
-                } catch { /* ignore */ }
-            });
-            return data;
-        });
-        return jsonLdData.find(d => d['@type'] === 'JobPosting') || null;
-    } catch (error) {
-        log.warning(`Failed to extract JSON-LD: ${error.message}`);
-    }
-    return null;
-};
+// Extract all job data from listing __NEXT_DATA__
+const parseJobFromListing = (job) => {
+    const data = job.job_customized_data || job;
+    const id = data.id || job.id;
+    const title = data.titulo || job.titulo || null;
 
-const parseListingFromNextData = (job) => {
-    const customData = job.job_customized_data || job;
-    return {
-        id: customData.id || job.id,
-        title: customData.titulo || job.titulo,
-        salary: customData.faixaSalarial || null,
-        short_description: customData.descricao || null,
-        date_posted: customData.dataAtualizacao || null,
-        company_id: customData.empId || null,
-        url: customData.id ? `https://www.catho.com.br/vagas/${encodeURIComponent((customData.titulo || 'job').toLowerCase().replace(/\s+/g, '-'))}/${customData.id}/` : null,
-    };
-};
+    if (!id || !title) return null;
 
-const buildJob = ({ listing, detail, jsonLd }) => {
-    const title = detail?.titulo || jsonLd?.title || listing?.title || null;
-    const company = detail?.empresa?.nome || jsonLd?.hiringOrganization?.name || null;
+    // Build clean URL
+    const slug = title.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    const url = `https://www.catho.com.br/vagas/${slug}/${id}/`;
 
-    // Location handling
+    // Extract company
+    const company = data.empresa?.nome || data.nomeEmpresa || job.empresa?.nome || null;
+
+    // Extract location
     let location = null;
-    if (detail?.vagas?.[0]) {
-        const loc = detail.vagas[0];
+    if (data.cidade && data.uf) {
+        location = `${data.cidade}, ${data.uf}`;
+    } else if (data.localizacao) {
+        location = data.localizacao;
+    } else if (job.cidade && job.uf) {
+        location = `${job.cidade}, ${job.uf}`;
+    } else if (data.vagas?.[0]) {
+        const loc = data.vagas[0];
         location = [loc.cidade, loc.uf].filter(Boolean).join(', ');
-    } else if (jsonLd?.jobLocation?.address) {
-        const addr = jsonLd.jobLocation.address;
-        location = [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', ');
     }
 
-    // Salary handling
-    let salary = listing?.salary || null;
-    if (jsonLd?.baseSalary?.value) {
-        const val = jsonLd.baseSalary.value;
-        if (typeof val === 'object') {
-            salary = `R$ ${val.minValue || ''} - R$ ${val.maxValue || ''}`.trim();
-        } else {
-            salary = `R$ ${val}`;
-        }
-    }
+    // Extract salary
+    const salary = data.faixaSalarial || data.salario || null;
 
-    // Benefits
-    const benefits = detail?.benef?.join(', ') || null;
+    // Extract employment type
+    const employmentType = data.regimeContrato || data.tipoContrato || null;
 
-    // Description
-    const descriptionHtml = detail?.descricao || jsonLd?.description || null;
-    const descriptionText = cleanHtml(descriptionHtml) || listing?.short_description || null;
+    // Extract description (plain text)
+    const description = data.descricao || null;
 
-    // Employment type
-    const employmentType = detail?.regimeContrato || jsonLd?.employmentType || null;
-
-    // Date posted
-    const datePosted = detail?.dataAtualizacao || jsonLd?.datePosted || listing?.date_posted || null;
-
-    // Build URL
-    let url = listing?.url || null;
-    if (listing?.id && listing?.title) {
-        const slug = (listing.title || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        url = `https://www.catho.com.br/vagas/${slug}/${listing.id}/`;
-    }
+    // Extract date
+    const datePosted = data.dataAtualizacao || data.dataPublicacao || null;
 
     return {
-        id: listing?.id || detail?.id || null,
+        id: String(id),
         title,
         company,
         location,
         salary,
         employment_type: employmentType,
-        benefits,
-        description_text: descriptionText,
-        description_html: descriptionHtml,
+        description,
         date_posted: datePosted,
         url,
-        apply_url: jsonLd?.applicationUrl || url,
-        source: detail ? 'detail' : 'listing',
+        apply_url: url,
         fetched_at: new Date().toISOString(),
     };
 };
@@ -149,42 +123,44 @@ try {
         startUrl,
         keyword = '',
         location = '',
-        collectDetails = false,
-        results_wanted: resultsWantedRaw = 10,
-        max_pages: maxPagesRaw = 2,
-        maxConcurrency = 3,
+        results_wanted: resultsWantedRaw = 50,
+        max_pages: maxPagesRaw = 5,
         proxyConfiguration,
     } = input;
 
-    const resultsWanted = Number.isFinite(+resultsWantedRaw) ? Math.max(1, +resultsWantedRaw) : 10;
-    const maxPages = Number.isFinite(+maxPagesRaw) ? Math.max(1, +maxPagesRaw) : 2;
+    const resultsWanted = Number.isFinite(+resultsWantedRaw) ? Math.max(1, +resultsWantedRaw) : 50;
+    const maxPages = Number.isFinite(+maxPagesRaw) ? Math.max(1, +maxPagesRaw) : 5;
     const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
 
-    // Parse startUrl for keyword/location if provided
+    // Determine search parameters from startUrl or inputs
     let keywordValue = keyword.trim();
     let locationValue = location.trim();
+    let startPage = 1;
+
     if (startUrl) {
-        try {
-            const u = new URL(startUrl);
-            const qFromUrl = u.searchParams.get('q');
-            const cidadeFromUrl = u.searchParams.get('cidade');
-            if (qFromUrl) keywordValue = qFromUrl;
-            if (cidadeFromUrl) locationValue = cidadeFromUrl;
-        } catch {
-            // ignore malformed startUrl
-        }
+        const parsed = parseSearchUrl(startUrl);
+        if (parsed.keyword) keywordValue = parsed.keyword;
+        if (parsed.location) locationValue = parsed.location;
+        if (parsed.page > 1) startPage = parsed.page;
     }
 
     const seenIds = new Set();
     let saved = 0;
     const startTime = Date.now();
-    const MAX_RUNTIME_MS = 3.5 * 60 * 1000; // 210 seconds
-    const stats = { pagesProcessed: 0, jobsSaved: 0, detailsFetched: 0, errors: 0 };
+    const MAX_RUNTIME_MS = 3.5 * 60 * 1000; // 210 seconds safety limit
+    const stats = { pagesProcessed: 0, jobsSaved: 0, errors: 0 };
+    let hasMorePages = true;
+
+    log.info('🚀 Starting Catho Jobs Scraper');
+    log.info(`   Keyword: ${keywordValue || '(all jobs)'}`);
+    log.info(`   Location: ${locationValue || '(all Brazil)'}`);
+    log.info(`   Results wanted: ${resultsWanted}`);
+    log.info(`   Max pages: ${maxPages}`);
 
     // Create Playwright crawler
     const crawler = new PlaywrightCrawler({
         proxyConfiguration: proxyConf,
-        maxConcurrency: Math.max(1, Number(maxConcurrency) || 3),
+        maxConcurrency: MAX_CONCURRENCY,
         maxRequestRetries: 3,
         requestHandlerTimeoutSecs: 60,
         navigationTimeoutSecs: 45,
@@ -199,7 +175,11 @@ try {
                     launchContext.launchOptions = {
                         ...launchContext.launchOptions,
                         headless: true,
-                        args: ['--disable-blink-features=AutomationControlled'],
+                        args: [
+                            '--disable-blink-features=AutomationControlled',
+                            '--disable-dev-shm-usage',
+                            '--no-sandbox',
+                        ],
                     };
                     launchContext.userAgent = getRandomUserAgent();
                 },
@@ -209,112 +189,103 @@ try {
             async ({ page }) => {
                 await page.setExtraHTTPHeaders({
                     'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 });
             },
         ],
         async requestHandler({ request, page }) {
-            const { userData } = request;
-            const isDetailPage = userData?.isDetail || false;
+            // Check timeout
+            if (Date.now() - startTime > MAX_RUNTIME_MS) {
+                log.info('⏱️ Timeout safety triggered. Stopping.');
+                return;
+            }
 
-            // Wait for page to load
+            // Check if we have enough results
+            if (saved >= resultsWanted) {
+                log.info(`✅ Reached target: ${saved}/${resultsWanted} jobs`);
+                return;
+            }
+
+            const pageNum = request.userData?.pageNum || 1;
+            stats.pagesProcessed += 1;
+
+            // Wait for page to fully load
             await page.waitForLoadState('domcontentloaded');
-            await sleep(500 + Math.random() * 1000);
+            await sleep(200 + Math.random() * 300); // Quick stealth delay
 
-            if (!isDetailPage) {
-                // LISTING PAGE
-                stats.pagesProcessed += 1;
-                log.info(`📄 Processing listing page: ${request.url}`);
+            log.info(`📄 Page ${pageNum}: ${request.url}`);
 
-                const nextData = await extractNextData(page);
-                if (!nextData) {
-                    log.warning('No __NEXT_DATA__ found on listing page');
-                    stats.errors += 1;
-                    return;
-                }
+            // Extract __NEXT_DATA__
+            const nextData = await extractNextData(page);
+            if (!nextData) {
+                log.warning(`No __NEXT_DATA__ found on page ${pageNum}`);
+                stats.errors += 1;
+                return;
+            }
 
-                const jobs = nextData?.props?.pageProps?.jobSearch?.jobSearchResult?.data?.jobs || [];
-                log.info(`Found ${jobs.length} jobs on page ${userData?.pageNum || 1}`);
+            // Get jobs array from __NEXT_DATA__
+            const jobsData = nextData?.props?.pageProps?.jobSearch?.jobSearchResult?.data;
+            const jobs = Array.isArray(jobsData) ? jobsData : (jobsData?.jobs || []);
 
-                for (const job of jobs) {
-                    if (saved >= resultsWanted) break;
-                    if (Date.now() - startTime > MAX_RUNTIME_MS) {
-                        log.info('⏱️ Timeout safety triggered. Stopping.');
-                        break;
-                    }
+            if (jobs.length === 0) {
+                log.info(`No jobs found on page ${pageNum}. End of results.`);
+                hasMorePages = false;
+                return;
+            }
 
-                    const listing = parseListingFromNextData(job);
-                    if (!listing.id) continue;
-                    if (seenIds.has(listing.id)) continue;
-                    seenIds.add(listing.id);
+            log.info(`Found ${jobs.length} jobs on page ${pageNum}`);
 
-                    if (collectDetails && listing.url) {
-                        // Queue detail page
-                        await crawler.addRequests([{
-                            url: listing.url,
-                            userData: { isDetail: true, listing },
-                        }]);
-                    } else {
-                        // Save listing directly
-                        const jobData = buildJob({ listing });
-                        await Dataset.pushData(jobData);
-                        saved += 1;
-                        stats.jobsSaved = saved;
+            // Parse and collect jobs
+            const jobsToSave = [];
+            for (const job of jobs) {
+                if (saved + jobsToSave.length >= resultsWanted) break;
 
-                        if (saved % 10 === 0) {
-                            log.info(`💾 Progress: ${saved}/${resultsWanted} jobs saved`);
-                        }
-                    }
-                }
+                const parsed = parseJobFromListing(job);
+                if (!parsed) continue;
+                if (seenIds.has(parsed.id)) continue;
 
-                // Check if we need more pages
-                const currentPage = userData?.pageNum || 1;
-                if (saved < resultsWanted && currentPage < maxPages && jobs.length > 0) {
-                    const nextPageUrl = buildSearchUrl({ keyword: keywordValue, location: locationValue, page: currentPage + 1 });
-                    await crawler.addRequests([{
-                        url: nextPageUrl,
-                        userData: { isDetail: false, pageNum: currentPage + 1 },
-                    }]);
-                }
+                seenIds.add(parsed.id);
+                jobsToSave.push(parsed);
+            }
 
-            } else {
-                // DETAIL PAGE
-                stats.detailsFetched += 1;
-                const { listing } = userData;
-                log.info(`🔍 Processing detail: ${listing.title || listing.id}`);
-
-                const nextData = await extractNextData(page);
-                const jsonLd = await extractJsonLd(page);
-                const detail = nextData?.props?.pageProps?.jobAdData || null;
-
-                const jobData = buildJob({ listing, detail, jsonLd });
-                await Dataset.pushData(jobData);
-                saved += 1;
+            // Batch save
+            if (jobsToSave.length > 0) {
+                await Dataset.pushData(jobsToSave);
+                saved += jobsToSave.length;
                 stats.jobsSaved = saved;
+                log.info(`💾 Saved ${jobsToSave.length} jobs (total: ${saved}/${resultsWanted})`);
+            }
 
-                if (saved % 10 === 0) {
-                    log.info(`💾 Progress: ${saved}/${resultsWanted} jobs saved`);
-                }
+            // Queue next page if needed
+            if (saved < resultsWanted && pageNum < maxPages && jobs.length >= 10 && hasMorePages) {
+                const nextPageUrl = buildSearchUrl({
+                    keyword: keywordValue,
+                    location: locationValue,
+                    page: pageNum + 1,
+                });
+                await crawler.addRequests([{
+                    url: nextPageUrl,
+                    userData: { pageNum: pageNum + 1 },
+                }]);
             }
         },
         async failedRequestHandler({ request }, error) {
             stats.errors += 1;
-            log.error(`Request failed: ${request.url} - ${error.message}`);
+            log.warning(`Request failed: ${request.url} - ${error.message}`);
         },
     });
 
-    // Start with first page
-    const firstPageUrl = startUrl || buildSearchUrl({ keyword: keywordValue, location: locationValue, page: 1 });
+    // Start crawling from first page
+    const firstPageUrl = buildSearchUrl({
+        keyword: keywordValue,
+        location: locationValue,
+        page: startPage,
+    });
+
     await crawler.addRequests([{
         url: firstPageUrl,
-        userData: { isDetail: false, pageNum: 1 },
+        userData: { pageNum: startPage },
     }]);
-
-    log.info(`🚀 Starting Catho Jobs Scraper`);
-    log.info(`   Keyword: ${keywordValue || '(all)'}`);
-    log.info(`   Location: ${locationValue || '(all)'}`);
-    log.info(`   Results wanted: ${resultsWanted}`);
-    log.info(`   Max pages: ${maxPages}`);
-    log.info(`   Collect details: ${collectDetails}`);
 
     await crawler.run();
 
@@ -325,11 +296,10 @@ try {
     log.info('📊 ACTOR RUN STATISTICS');
     log.info('='.repeat(60));
     log.info(`✅ Jobs saved: ${saved}/${resultsWanted}`);
-    log.info(`📄 Pages processed: ${stats.pagesProcessed}/${maxPages}`);
-    log.info(`🔍 Details fetched: ${stats.detailsFetched}`);
-    log.info(`⚠️  Errors encountered: ${stats.errors}`);
-    log.info(`⏱️  Total runtime: ${totalTime.toFixed(2)}s`);
-    log.info(`⚡ Performance: ${(saved / totalTime).toFixed(2)} jobs/second`);
+    log.info(`📄 Pages processed: ${stats.pagesProcessed}`);
+    log.info(`⚠️  Errors: ${stats.errors}`);
+    log.info(`⏱️  Runtime: ${totalTime.toFixed(2)}s`);
+    log.info(`⚡ Speed: ${(saved / totalTime).toFixed(2)} jobs/second`);
     log.info('='.repeat(60));
 
     if (saved === 0) {
@@ -337,12 +307,12 @@ try {
         log.error(`❌ ${errorMsg}`);
         await Actor.fail(errorMsg);
     } else {
-        log.info(`✅ SUCCESS: Actor completed with ${saved} job(s) in dataset.`);
+        log.info(`✅ SUCCESS: ${saved} job(s) saved to dataset.`);
         await Actor.setValue('OUTPUT_SUMMARY', {
             jobsSaved: saved,
             pagesProcessed: stats.pagesProcessed,
             runtime: totalTime,
-            success: true
+            success: true,
         });
     }
 

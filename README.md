@@ -6,11 +6,11 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 
 ## Features
 
-- **Comprehensive Data Extraction** — Collects job title, company, location, salary, description, benefits, and more
-- **Brazilian Job Market** — Access the largest job platform in Brazil with millions of listings
+- **Fast Extraction** — Collects jobs quickly from listing pages
+- **Comprehensive Data** — Job title, company, location, salary, description, and more
+- **Brazilian Job Market** — Access Brazil's largest job platform with millions of listings
 - **Flexible Search** — Filter by keywords, location, or use direct search URLs
-- **Detail Page Enrichment** — Optionally fetch full job descriptions and requirements
-- **Scalable Collection** — Extract from 10 to thousands of jobs per run
+- **Scalable** — Extract from 10 to thousands of jobs per run
 - **Production Ready** — Optimized for reliability with built-in retry logic
 
 ---
@@ -32,10 +32,8 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 | `keyword` | String | Job title or skills to search | *(empty)* |
 | `location` | String | City or state filter | *(empty)* |
 | `startUrl` | String | Direct Catho search URL (overrides keyword/location) | - |
-| `collectDetails` | Boolean | Fetch full job descriptions from detail pages | `false` |
-| `results_wanted` | Integer | Maximum jobs to collect | `10` |
-| `max_pages` | Integer | Maximum listing pages to process | `2` |
-| `maxConcurrency` | Integer | Parallel requests (affects speed and blocking risk) | `3` |
+| `results_wanted` | Integer | Maximum jobs to collect | `50` |
+| `max_pages` | Integer | Maximum listing pages to process | `5` |
 | `proxyConfiguration` | Object | Proxy settings for reliability | Apify Residential |
 
 ---
@@ -48,19 +46,18 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 {
   "keyword": "desenvolvedor",
   "location": "São Paulo",
-  "results_wanted": 50
+  "results_wanted": 100
 }
 ```
 
-### Full Details Collection — Engineering Positions
+### Engineering Positions in Rio
 
 ```json
 {
   "keyword": "engenheiro",
   "location": "Rio de Janeiro",
-  "results_wanted": 100,
-  "collectDetails": true,
-  "max_pages": 5
+  "results_wanted": 50,
+  "max_pages": 3
 }
 ```
 
@@ -69,8 +66,7 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 ```json
 {
   "startUrl": "https://www.catho.com.br/vagas/?q=analista&cidade=Curitiba",
-  "results_wanted": 30,
-  "collectDetails": true
+  "results_wanted": 30
 }
 ```
 
@@ -98,9 +94,7 @@ Each extracted job contains the following fields:
 | `location` | String | City and state |
 | `salary` | String | Salary range (when available) |
 | `employment_type` | String | Contract type (CLT, PJ, etc.) |
-| `benefits` | String | Listed benefits |
-| `description_text` | String | Full job description (plain text) |
-| `description_html` | String | Full job description (HTML) |
+| `description` | String | Job description (plain text) |
 | `date_posted` | String | Publication date |
 | `url` | String | Job detail page URL |
 | `apply_url` | String | Application URL |
@@ -116,8 +110,7 @@ Each extracted job contains the following fields:
   "location": "São Paulo, SP",
   "salary": "R$ 8.000 - R$ 12.000",
   "employment_type": "CLT",
-  "benefits": "Vale transporte, Vale refeição, Plano de saúde",
-  "description_text": "Buscamos profissional com experiência em React e Node.js...",
+  "description": "Buscamos profissional com experiência em React e Node.js para atuar em projetos inovadores...",
   "date_posted": "2026-01-06",
   "url": "https://www.catho.com.br/vagas/desenvolvedor-full-stack/34842019/",
   "fetched_at": "2026-01-07T08:30:00.000Z"
@@ -126,21 +119,20 @@ Each extracted job contains the following fields:
 
 ---
 
-## Performance Recommendations
+## Performance
 
-| Scenario | Results | Details | Pages | Est. Time |
-|----------|---------|---------|-------|-----------|
-| Quick Test | 10 | Off | 1 | ~30 seconds |
-| Basic Research | 50 | Off | 3 | ~1 minute |
-| Detailed Analysis | 100 | On | 5 | ~3 minutes |
-| Large Dataset | 500 | On | 20 | ~10 minutes |
+| Scenario | Results | Pages | Est. Time |
+|----------|---------|-------|-----------|
+| Quick Test | 20 | 2 | ~20 seconds |
+| Basic Research | 50 | 3 | ~30 seconds |
+| Standard Collection | 100 | 5 | ~1 minute |
+| Large Dataset | 500 | 25 | ~5 minutes |
 
 ### Tips for Best Results
 
-1. **Start Small** — Test with `results_wanted: 10` before scaling up
+1. **Start Small** — Test with `results_wanted: 20` before scaling up
 2. **Use Proxies** — Enable Apify Proxy for reliable collection
-3. **Limit Concurrency** — Keep `maxConcurrency` at 2-3 to avoid blocking
-4. **Monitor Runs** — Check logs for any warning messages
+3. **Monitor Runs** — Check logs for any warning messages
 
 ---
 

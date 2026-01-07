@@ -1,10 +1,8 @@
 {
   "keyword": "desenvolvedor",
   "location": "São Paulo",
-  "results_wanted": 10,
-  "max_pages": 2,
-  "collectDetails": false,
-  "maxConcurrency": 3,
+  "results_wanted": 50,
+  "max_pages": 5,
   "proxyConfiguration": {
     "useApifyProxy": true
   }
