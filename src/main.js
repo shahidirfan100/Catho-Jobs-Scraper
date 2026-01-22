@@ -1,5 +1,6 @@
 // Catho Jobs Scraper - Fast, Stealthy, Production-Ready
 // Extracts all data from __NEXT_DATA__ on listing pages only
+// Fixed: Path-based URLs + strict location filtering
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler, Dataset, sleep } from 'crawlee';
 
@@ -17,26 +18,113 @@ const USER_AGENTS = [
 
 const getRandomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-// Build search URL with proper parameter handling
-const buildSearchUrl = ({ keyword, location, page = 1 }) => {
-    const url = new URL(BASE_URL);
-    if (keyword) url.searchParams.set('q', keyword);
-    if (location) url.searchParams.set('cidade', location);
-    if (page > 1) url.searchParams.set('page', page.toString());
-    return url.href;
+// Convert text to URL-safe slug (e.g., "São Paulo" → "sao-paulo")
+const normalizeToSlug = (text) => {
+    if (!text) return '';
+    return text.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars except hyphens
+        .trim()
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-'); // Collapse multiple hyphens
 };
 
-// Parse URL to extract search parameters
+// Normalize text for comparison (remove accents, lowercase, trim)
+const normalizeForComparison = (text) => {
+    if (!text) return '';
+    return text.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/[^a-z0-9\s,]/g, '') // Keep letters, numbers, spaces, commas
+        .trim();
+};
+
+// Check if job location matches the requested location
+const matchesRequestedLocation = (jobLocation, requestedLocation) => {
+    if (!requestedLocation) return true; // No filter requested
+    if (!jobLocation) return false; // No location to match
+
+    const jobNorm = normalizeForComparison(jobLocation);
+    const reqNorm = normalizeForComparison(requestedLocation);
+
+    // Extract city name from request (handle formats like "sao-paulo-sp", "São Paulo, SP", "sp/sao-paulo")
+    const reqCity = reqNorm
+        .replace(/,?\s*(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)$/i, '') // Remove state suffix
+        .replace(/^(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)\s*/i, '') // Remove state prefix
+        .replace(/-/g, ' ') // Convert hyphens to spaces
+        .trim();
+
+    // Extract city from job location (usually "City, STATE" format)
+    const jobCity = jobNorm.split(',')[0].trim();
+
+    // Check if cities match
+    if (jobCity === reqCity) return true;
+    if (jobCity.includes(reqCity) || reqCity.includes(jobCity)) return true;
+
+    // Handle slug comparison (e.g., "sao jose dos campos" vs "sao-jose-dos-campos")
+    const jobSlug = jobCity.replace(/\s+/g, '-');
+    const reqSlug = reqCity.replace(/\s+/g, '-');
+    if (jobSlug === reqSlug) return true;
+
+    return false;
+};
+
+// Build search URL using Catho's path-based structure
+const buildSearchUrl = ({ keyword, location, page = 1, baseDirectUrl = null }) => {
+    // If we have a direct URL (user-provided), use it with pagination only
+    if (baseDirectUrl) {
+        const cleanUrl = baseDirectUrl.replace(/\?.*$/, '').replace(/\/$/, '') + '/';
+        return page > 1 ? `${cleanUrl}?page=${page}` : cleanUrl;
+    }
+
+    let path = BASE_URL;
+    const keywordSlug = normalizeToSlug(keyword);
+    const locationSlug = normalizeToSlug(location);
+
+    // Catho URL patterns:
+    // - /vagas/keyword/ (keyword only)
+    // - /vagas/keyword/city-state/ (keyword + location)
+    // - /vagas/state/city/ (location only, but city-state also works)
+    if (keywordSlug && locationSlug) {
+        // Combined: /vagas/keyword/location/
+        path += `${keywordSlug}/${locationSlug}/`;
+    } else if (keywordSlug) {
+        // Keyword only: /vagas/keyword/
+        path += `${keywordSlug}/`;
+    } else if (locationSlug) {
+        // Location only: /vagas/location/
+        path += `${locationSlug}/`;
+    }
+
+    // Add page parameter as query string
+    if (page > 1) {
+        path += `?page=${page}`;
+    }
+
+    return path;
+};
+
+// Parse URL to extract search parameters from path-based URLs
 const parseSearchUrl = (urlString) => {
     try {
         const url = new URL(urlString);
+        const pathname = url.pathname.replace(/^\/vagas\/?/, '').replace(/\/$/, '');
+        const segments = pathname.split('/').filter(Boolean);
+
+        // Query param for keyword (fallback)
+        const keywordFromQuery = url.searchParams.get('q') || '';
+        const page = parseInt(url.searchParams.get('page') || '1', 10);
+
+        // For direct URLs, we keep the path segments as-is
+        // The URL structure is the source of truth
         return {
-            keyword: url.searchParams.get('q') || '',
-            location: url.searchParams.get('cidade') || '',
-            page: parseInt(url.searchParams.get('page') || '1', 10),
+            keyword: keywordFromQuery,
+            location: '', // Don't infer - use the full URL
+            page,
+            pathSegments: segments,
+            isDirectUrl: segments.length > 0,
         };
     } catch {
-        return { keyword: '', location: '', page: 1 };
+        return { keyword: '', location: '', page: 1, pathSegments: [], isDirectUrl: false };
     }
 };
 
@@ -143,16 +231,47 @@ try {
     let keywordValue = keyword.trim();
     let locationValue = location.trim();
     let startPage = 1;
+    let directBaseUrl = null; // Store user-provided URL for pagination
+    let locationFilter = locationValue; // Location to filter results by
 
-    if (startUrl) {
+    if (startUrl && startUrl.includes('catho.com.br/vagas')) {
+        // User provided a direct URL - use it as-is
+        directBaseUrl = startUrl;
         const parsed = parseSearchUrl(startUrl);
         if (parsed.keyword) keywordValue = parsed.keyword;
-        if (parsed.location) locationValue = parsed.location;
         if (parsed.page > 1) startPage = parsed.page;
+
+        // Extract location from URL path for filtering
+        // e.g., /vagas/administrativo/sao-jose-dos-campos-sp/ -> "sao-jose-dos-campos-sp"
+        // e.g., /vagas/sp/sao-jose-dos-campos/ -> "sao-jose-dos-campos"
+        if (parsed.pathSegments.length > 0) {
+            // Last segment is usually the location, or second-to-last if there's a state prefix
+            const segments = parsed.pathSegments;
+            // Check if first segment looks like a state abbreviation
+            const stateAbbrevs = ['sp', 'rj', 'mg', 'ba', 'pr', 'rs', 'sc', 'go', 'df', 'ce', 'pe', 'pa', 'ma', 'mt', 'ms', 'es', 'pb', 'rn', 'al', 'se', 'pi', 'am', 'ro', 'ac', 'ap', 'rr', 'to'];
+            if (segments.length >= 2 && stateAbbrevs.includes(segments[0].toLowerCase())) {
+                // Format: /vagas/sp/sao-jose-dos-campos/
+                locationFilter = segments[1];
+            } else if (segments.length >= 2) {
+                // Format: /vagas/keyword/city-state/ - last segment is location
+                locationFilter = segments[segments.length - 1];
+            } else if (segments.length === 1) {
+                // Could be keyword or location - check if it contains state suffix
+                const seg = segments[0];
+                if (seg.match(/-(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)$/i)) {
+                    locationFilter = seg;
+                }
+            }
+            log.info(`📍 Detected location filter from URL: ${locationFilter}`);
+        }
+    } else if (locationValue) {
+        // User provided location via input field
+        locationFilter = locationValue;
     }
 
     const seenIds = new Set();
     let saved = 0;
+    let skippedLocationMismatch = 0;
     const startTime = Date.now();
     const MAX_RUNTIME_MS = 3.5 * 60 * 1000; // 210 seconds safety limit
     const stats = { pagesProcessed: 0, jobsSaved: 0, errors: 0 };
@@ -161,6 +280,8 @@ try {
     log.info('🚀 Starting Catho Jobs Scraper');
     log.info(`   Keyword: ${keywordValue || '(all jobs)'}`);
     log.info(`   Location: ${locationValue || '(all Brazil)'}`);
+    log.info(`   Location Filter: ${locationFilter || '(none)'}`);
+    log.info(`   Direct URL: ${directBaseUrl || '(none)'}`);
     log.info(`   Results wanted: ${resultsWanted}`);
 
     // Create Playwright crawler
@@ -241,7 +362,7 @@ try {
 
             log.info(`Found ${jobs.length} jobs on page ${pageNum}`);
 
-            // Parse and collect jobs
+            // Parse and collect jobs with location filtering
             const jobsToSave = [];
             for (const job of jobs) {
                 if (saved + jobsToSave.length >= resultsWanted) break;
@@ -249,6 +370,12 @@ try {
                 const parsed = parseJobFromListing(job);
                 if (!parsed) continue;
                 if (seenIds.has(parsed.id)) continue;
+
+                // 🆕 Apply strict location filtering to exclude sponsored/nearby jobs
+                if (locationFilter && !matchesRequestedLocation(parsed.location, locationFilter)) {
+                    skippedLocationMismatch++;
+                    continue; // Skip jobs that don't match the requested location
+                }
 
                 seenIds.add(parsed.id);
                 jobsToSave.push(parsed);
@@ -268,6 +395,7 @@ try {
                     keyword: keywordValue,
                     location: locationValue,
                     page: pageNum + 1,
+                    baseDirectUrl: directBaseUrl, // Use direct URL if provided
                 });
                 await crawler.addRequests([{
                     url: nextPageUrl,
@@ -286,7 +414,10 @@ try {
         keyword: keywordValue,
         location: locationValue,
         page: startPage,
+        baseDirectUrl: directBaseUrl, // Use direct URL if provided
     });
+
+    log.info(`🔗 Starting URL: ${firstPageUrl}`);
 
     await crawler.addRequests([{
         url: firstPageUrl,
@@ -303,6 +434,7 @@ try {
     log.info('='.repeat(60));
     log.info(`✅ Jobs saved: ${saved}/${resultsWanted}`);
     log.info(`📄 Pages processed: ${stats.pagesProcessed}`);
+    log.info(`🚫 Skipped (location mismatch): ${skippedLocationMismatch}`);
     log.info(`⚠️  Errors: ${stats.errors}`);
     log.info(`⏱️  Runtime: ${totalTime.toFixed(2)}s`);
     log.info(`⚡ Speed: ${(saved / totalTime).toFixed(2)} jobs/second`);
