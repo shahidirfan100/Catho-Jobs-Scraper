@@ -293,16 +293,16 @@ try {
     log.info(`   Direct URL: ${directBaseUrl || '(none)'}`);
     log.info(`   Results wanted: ${resultsWanted}`);
 
-    // Create Playwright crawler
+    // Create Playwright crawler - optimized for speed
     const crawler = new PlaywrightCrawler({
         proxyConfiguration: proxyConf,
         maxConcurrency: MAX_CONCURRENCY,
-        maxRequestRetries: 3,
-        requestHandlerTimeoutSecs: 60,
-        navigationTimeoutSecs: 45,
+        maxRequestRetries: 2,
+        requestHandlerTimeoutSecs: 30,
+        navigationTimeoutSecs: 20,
         useSessionPool: true,
         sessionPoolOptions: {
-            maxPoolSize: 10,
+            maxPoolSize: 5,
         },
         browserPoolOptions: {
             useFingerprints: true,
@@ -345,9 +345,8 @@ try {
             const pageNum = request.userData?.pageNum || 1;
             stats.pagesProcessed += 1;
 
-            // Wait for page to fully load
+            // Fast load - only wait for DOM, skip unnecessary delays
             await page.waitForLoadState('domcontentloaded');
-            await sleep(200 + Math.random() * 300); // Quick stealth delay
 
             log.info(`📄 Page ${pageNum}: ${request.url}`);
 
