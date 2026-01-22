@@ -34,7 +34,9 @@ const normalizeForComparison = (text) => {
     if (!text) return '';
     return text.toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/-/g, ' ') // Convert hyphens to spaces (for URL slugs)
         .replace(/[^a-z0-9\s,]/g, '') // Keep letters, numbers, spaces, commas
+        .replace(/\s+/g, ' ') // Collapse multiple spaces
         .trim();
 };
 
@@ -47,23 +49,30 @@ const matchesRequestedLocation = (jobLocation, requestedLocation) => {
     const reqNorm = normalizeForComparison(requestedLocation);
 
     // Extract city name from request (handle formats like "sao-paulo-sp", "São Paulo, SP", "sp/sao-paulo")
+    const statePattern = /,?\s*(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)\s*$/i;
+    const statePrefixPattern = /^(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)\s+/i;
+
     const reqCity = reqNorm
-        .replace(/,?\s*(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)$/i, '') // Remove state suffix
-        .replace(/^(sp|rj|mg|ba|pr|rs|sc|go|df|ce|pe|pa|ma|mt|ms|es|pb|rn|al|se|pi|am|ro|ac|ap|rr|to)\s*/i, '') // Remove state prefix
-        .replace(/-/g, ' ') // Convert hyphens to spaces
+        .replace(statePattern, '') // Remove state suffix
+        .replace(statePrefixPattern, '') // Remove state prefix  
         .trim();
 
     // Extract city from job location (usually "City, STATE" format)
     const jobCity = jobNorm.split(',')[0].trim();
 
-    // Check if cities match
+    // Direct match
     if (jobCity === reqCity) return true;
+
+    // Partial match (one contains the other)
     if (jobCity.includes(reqCity) || reqCity.includes(jobCity)) return true;
 
-    // Handle slug comparison (e.g., "sao jose dos campos" vs "sao-jose-dos-campos")
-    const jobSlug = jobCity.replace(/\s+/g, '-');
-    const reqSlug = reqCity.replace(/\s+/g, '-');
-    if (jobSlug === reqSlug) return true;
+    // Word-by-word match (handles different word order)
+    const reqWords = reqCity.split(' ').filter(w => w.length > 2);
+    const jobWords = jobCity.split(' ').filter(w => w.length > 2);
+    const matchedWords = reqWords.filter(w => jobWords.includes(w));
+    if (matchedWords.length >= Math.min(reqWords.length, jobWords.length) && matchedWords.length > 0) {
+        return true;
+    }
 
     return false;
 };
