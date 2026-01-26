@@ -78,11 +78,14 @@ const matchesRequestedLocation = (jobLocation, requestedLocation) => {
 };
 
 // Build search URL using Catho's path-based structure
-const buildSearchUrl = ({ keyword, location, page = 1, baseDirectUrl = null }) => {
+const buildSearchUrl = ({ keyword, location, page = 1, baseDirectUrl = null, lastDays = null }) => {
     // If we have a direct URL (user-provided), use it with pagination only
     if (baseDirectUrl) {
         const cleanUrl = baseDirectUrl.replace(/\?.*$/, '').replace(/\/$/, '') + '/';
-        return page > 1 ? `${cleanUrl}?page=${page}` : cleanUrl;
+        const queryParams = [];
+        if (page > 1) queryParams.push(`page=${page}`);
+        if (lastDays !== null && lastDays !== 'anytime') queryParams.push(`lastDays=${lastDays}`);
+        return queryParams.length > 0 ? `${cleanUrl}?${queryParams.join('&')}` : cleanUrl;
     }
 
     let path = BASE_URL;
@@ -104,9 +107,13 @@ const buildSearchUrl = ({ keyword, location, page = 1, baseDirectUrl = null }) =
         path += `${locationSlug}/`;
     }
 
-    // Add page parameter as query string
-    if (page > 1) {
-        path += `?page=${page}`;
+    // Add query parameters
+    const queryParams = [];
+    if (page > 1) queryParams.push(`page=${page}`);
+    if (lastDays !== null && lastDays !== 'anytime') queryParams.push(`lastDays=${lastDays}`);
+    
+    if (queryParams.length > 0) {
+        path += `?${queryParams.join('&')}`;
     }
 
     return path;
@@ -227,9 +234,21 @@ try {
         startUrl,
         keyword = '',
         location = '',
+        lastDays: lastDaysInput = 'anytime',
         results_wanted: resultsWantedRaw = 50,
         proxyConfiguration,
     } = input;
+
+    // Convert lastDays string to numeric value
+    const lastDaysMap = {
+        'today': 0,
+        '2days': 1,
+        '3days': 2,
+        'week': 7,
+        'month': 30,
+        'anytime': null,
+    };
+    const lastDaysValue = lastDaysMap[lastDaysInput] !== undefined ? lastDaysMap[lastDaysInput] : null;
 
     const resultsWanted = Number.isFinite(+resultsWantedRaw) ? Math.max(1, +resultsWantedRaw) : 50;
     // Auto-calculate max pages based on results wanted (Catho shows ~15 jobs per page)
@@ -291,6 +310,7 @@ try {
     log.info(`   Location: ${locationValue || '(all Brazil)'}`);
     log.info(`   Location Filter: ${locationFilter || '(none)'}`);
     log.info(`   Direct URL: ${directBaseUrl || '(none)'}`);
+    log.info(`   Date Filter: ${lastDaysInput} (lastDays=${lastDaysValue !== null ? lastDaysValue : 'not applied'})`);
     log.info(`   Results wanted: ${resultsWanted}`);
 
     // Create Playwright crawler - optimized for speed
@@ -404,6 +424,7 @@ try {
                     location: locationValue,
                     page: pageNum + 1,
                     baseDirectUrl: directBaseUrl, // Use direct URL if provided
+                    lastDays: lastDaysValue,
                 });
                 await crawler.addRequests([{
                     url: nextPageUrl,
@@ -423,6 +444,7 @@ try {
         location: locationValue,
         page: startPage,
         baseDirectUrl: directBaseUrl, // Use direct URL if provided
+        lastDays: lastDaysValue,
     });
 
     log.info(`🔗 Starting URL: ${firstPageUrl}`);

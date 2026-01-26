@@ -27,6 +27,16 @@
       "editor": "textfield",
       "example": "São Paulo"
     },
+    "lastDays": {
+      "title": "Date Filter",
+      "type": "string",
+      "description": "Filter jobs by posting date.",
+      "editor": "select",
+      "enum": ["anytime", "today", "2days", "3days", "week", "month"],
+      "enumTitles": ["Anytime", "Today", "Last 2 Days", "Last 3 Days", "Last Week", "Last Month"],
+      "default": "anytime",
+      "prefill": "anytime"
+    },
     "results_wanted": {
       "title": "Maximum Jobs to Extract",
       "type": "integer",
