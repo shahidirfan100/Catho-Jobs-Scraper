@@ -1,8 +1,8 @@
 {
   "keyword": "desenvolvedor",
-  "location": "São Paulo",
-  "lastDays": "week",
-  "results_wanted": 50,
+  "location": "",
+  "lastDays": "anytime",
+  "results_wanted": 20,
   "proxyConfiguration": {
     "useApifyProxy": true
   }

@@ -32,7 +32,7 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 | `keyword` | String | Job title or skills to search | *(empty)* |
 | `location` | String | City or state filter | *(empty)* |
 | `startUrl` | String | Direct Catho search URL (overrides keyword/location) | - |
-| `results_wanted` | Integer | Maximum jobs to collect | `50` |
+| `results_wanted` | Integer | Maximum jobs to collect | `20` |
 | `proxyConfiguration` | Object | Proxy settings for reliability | Apify Residential |
 
 ---

@@ -16,8 +16,8 @@
       "type": "string",
       "description": "Job title or skills to search (e.g., 'desenvolvedor', 'engenheiro').",
       "editor": "textfield",
-      "prefill": "",
-      "default": "",
+      "prefill": "desenvolvedor",
+      "default": "desenvolvedor",
       "example": "desenvolvedor"
     },
     "location": {
@@ -42,8 +42,8 @@
       "type": "integer",
       "description": "Maximum number of job listings to collect.",
       "minimum": 1,
-      "default": 50,
-      "prefill": 50,
+      "default": 20,
+      "prefill": 20,
       "editor": "number"
     },
     "proxyConfiguration": {
