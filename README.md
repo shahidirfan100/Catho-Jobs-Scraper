@@ -6,12 +6,12 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 
 ## Features
 
-- **Fast Extraction** — Collects jobs quickly from listing pages
-- **Comprehensive Data** — Job title, company, location, salary, description, and more
+- **Fast Extraction** — Collects jobs quickly, including full descriptions, in seconds
+- **Comprehensive Data** — Job title, company, location, salary, benefits, contract type, full description, and more
 - **Brazilian Job Market** — Access Brazil's largest job platform with millions of listings
-- **Flexible Search** — Filter by keywords, location, or use direct search URLs
+- **Flexible Search** — Filter by keywords, city or state, posting date, or use direct search URLs
 - **Scalable** — Extract from 10 to thousands of jobs per run
-- **Production Ready** — Optimized for reliability with built-in retry logic
+- **Production Ready** — Country-matched residential access with automatic retries and recovery
 
 ---
 
@@ -29,11 +29,12 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `keyword` | String | Job title or skills to search | *(empty)* |
-| `location` | String | City or state filter | *(empty)* |
+| `keyword` | String | Job title or skills to search | `desenvolvedor` |
+| `location` | String | City (e.g. "São Paulo"), city + state ("São Paulo, SP"), state ("SP"), or slug ("sao-paulo-sp") | *(empty)* |
 | `startUrl` | String | Direct Catho search URL (overrides keyword/location) | - |
+| `lastDays` | String | Posting-date filter: `anytime`, `today`, `2days`, `3days`, `week`, `month` | `anytime` |
 | `results_wanted` | Integer | Maximum jobs to collect | `20` |
-| `proxyConfiguration` | Object | Proxy settings for reliability | Apify Residential |
+| `proxyConfiguration` | Object | Proxy settings for reliability | Apify Residential, Brazil |
 
 ---
 
@@ -59,11 +60,22 @@ Extract comprehensive job listings from **Catho.com.br** — Brazil's premier jo
 }
 ```
 
+### Recent Postings Only — Last Week
+
+```json
+{
+  "keyword": "analista",
+  "location": "São Paulo, SP",
+  "lastDays": "week",
+  "results_wanted": 50
+}
+```
+
 ### Direct URL Scraping
 
 ```json
 {
-  "startUrl": "https://www.catho.com.br/vagas/?q=analista&cidade=Curitiba",
+  "startUrl": "https://www.catho.com.br/vagas/analista/curitiba-pr/",
   "results_wanted": 30
 }
 ```
@@ -120,10 +132,10 @@ Each extracted job contains the following fields:
 
 | Scenario | Results | Est. Time |
 |----------|---------|-----------|
-| Quick Test | 20 | ~20 seconds |
-| Basic Research | 50 | ~30 seconds |
-| Standard Collection | 100 | ~1 minute |
-| Large Dataset | 500 | ~5 minutes |
+| Quick Test | 20 | ~6 seconds |
+| Basic Research | 50 | ~15 seconds |
+| Standard Collection | 100 | ~30 seconds |
+| Large Dataset | 500 | ~2 minutes |
 
 ### Tips for Best Results
 

@@ -4,6 +4,10 @@
   "lastDays": "anytime",
   "results_wanted": 20,
   "proxyConfiguration": {
-    "useApifyProxy": true
+    "useApifyProxy": true,
+    "apifyProxyGroups": [
+      "RESIDENTIAL"
+    ],
+    "apifyProxyCountry": "BR"
   }
 }

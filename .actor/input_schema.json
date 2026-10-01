@@ -55,13 +55,8 @@
         "useApifyProxy": true,
         "apifyProxyGroups": [
           "RESIDENTIAL"
-        ]
-      },
-      "prefill": {
-        "useApifyProxy": true,
-        "apifyProxyGroups": [
-          "RESIDENTIAL"
-        ]
+        ],
+        "apifyProxyCountry": "BR"
       }
     }
   },

@@ -1,13 +1,12 @@
 {
   "name": "catho-jobs-scraper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Extract job listings from Catho.com.br - Brazil's leading job platform. Get comprehensive job data including salaries, descriptions, and company information.",
   "type": "module",
   "dependencies": {
     "apify": "^3.7.0",
-    "crawlee": "^3.16.0",
-    "playwright": "1.59.1",
-    "cheerio": "^1.2.0"
+    "cheerio": "^1.2.0",
+    "impit": "0.14.5"
   },
   "devDependencies": {
     "@apify/eslint-config": "^1.0.0",
